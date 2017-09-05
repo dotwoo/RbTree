@@ -1,7 +1,5 @@
 package rbtree
 
-import "fmt"
-
 const (
 	RED   = 0
 	BLACK = 1
@@ -69,7 +67,7 @@ func (t *Tree) Clear() {
 }
 
 //Insert insert the key-value pair into the rbtree
-func (t *Tree) Insert(key keytype, value valuetype) {
+func (t *Tree) Insert(key keytype, value valuetype) *node {
 	x := t.root
 	var y *node
 
@@ -88,14 +86,14 @@ func (t *Tree) Insert(key keytype, value valuetype) {
 	if y == nil {
 		z.color = BLACK
 		t.root = z
-		return
+		return z
 	} else if z.Key.LessThan(y.Key) {
 		y.left = z
 	} else {
 		y.right = z
 	}
 	t.rb_insert_fixup(z)
-
+	return z
 }
 
 //Delete delete the node by key
@@ -288,11 +286,11 @@ func (t *Tree) right_rotate(x *node) {
 	x.parent = y
 }
 func (t *Tree) Preorder() {
-	fmt.Println("preorder begin!")
+	//fmt.Println("preorder begin!")
 	if t.root != nil {
 		t.root.preorder()
 	}
-	fmt.Println("preorder end!")
+	//fmt.Println("preorder end!")
 }
 
 //findnode find the node by key and return it,if not exists return nil
@@ -333,23 +331,23 @@ func (n *node) Next() *node {
 }
 
 func (n *node) preorder() {
-	fmt.Printf("(%v %v)", n.Key, n.Value)
+	//fmt.Printf("(%v %v)", n.Key, n.Value)
 	if n.parent == nil {
-		fmt.Printf("nil")
+		//fmt.Printf("nil")
 	} else {
-		fmt.Printf("whose parent is %v", n.parent.Key)
+		//fmt.Printf("whose parent is %v", n.parent.Key)
 	}
 	if n.color == RED {
-		fmt.Println(" and color RED")
+		//fmt.Println(" and color RED")
 	} else {
-		fmt.Println(" and color BLACK")
+		//fmt.Println(" and color BLACK")
 	}
 	if n.left != nil {
-		fmt.Printf("%v's left child is ", n.Key)
+		//fmt.Printf("%v's left child is ", n.Key)
 		n.left.preorder()
 	}
 	if n.right != nil {
-		fmt.Printf("%v's right child is ", n.Key)
+		//fmt.Printf("%v's right child is ", n.Key)
 		n.right.preorder()
 	}
 }
@@ -389,4 +387,20 @@ func maximum(n *node) *node {
 		n = n.right
 	}
 	return n
+}
+
+func (n *node) Prex() *node {
+	return psuccessor(n)
+}
+
+func psuccessor(x *node) *node {
+	if x.left != nil {
+		return maximum(x.left)
+	}
+	y := x.parent
+	for y != nil && x == y.left {
+		x = y
+		y = x.parent
+	}
+	return y
 }
