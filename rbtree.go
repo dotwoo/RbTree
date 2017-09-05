@@ -1,8 +1,13 @@
 package rbtree
 
+import (
+	"fmt"
+	"log"
+)
+
 const (
-	RED   = 0
-	BLACK = 1
+	RED   = true
+	BLACK = false
 )
 
 type keytype interface {
@@ -13,7 +18,7 @@ type valuetype interface{}
 
 type node struct {
 	left, right, parent *node
-	color               int
+	color               bool
 	Key                 keytype
 	Value               valuetype
 }
@@ -100,6 +105,7 @@ func (t *Tree) Insert(key keytype, value valuetype) *node {
 func (t *Tree) Delete(key keytype) {
 	z := t.findnode(key)
 	if z == nil {
+		log.Println("delete cont find:", key)
 		return
 	}
 
@@ -134,7 +140,7 @@ func (t *Tree) Delete(key keytype) {
 		y.left.parent = y
 		y.color = z.color
 	}
-	if y_original_color == BLACK {
+	if y_original_color == BLACK && x != nil {
 		t.rb_delete_fixup(x, parent)
 	}
 	t.size -= 1
@@ -182,14 +188,14 @@ func (t *Tree) rb_insert_fixup(z *node) {
 
 func (t *Tree) rb_delete_fixup(x, parent *node) {
 	var w *node
-
+	//fmt.Println(x, parent)
 	for x != t.root && getColor(x) == BLACK {
 		if x != nil {
 			parent = x.parent
 		}
 		if x == parent.left {
 			w = parent.right
-			if w.color == RED {
+			if getColor(w) == RED {
 				w.color = BLACK
 				parent.color = RED
 				t.left_rotate(x.parent)
@@ -217,7 +223,7 @@ func (t *Tree) rb_delete_fixup(x, parent *node) {
 			}
 		} else {
 			w = parent.left
-			if w.color == RED {
+			if getColor(w) == RED {
 				w.color = BLACK
 				parent.color = RED
 				t.right_rotate(parent)
@@ -286,11 +292,11 @@ func (t *Tree) right_rotate(x *node) {
 	x.parent = y
 }
 func (t *Tree) Preorder() {
-	//fmt.Println("preorder begin!")
+	fmt.Println("preorder begin!")
 	if t.root != nil {
 		t.root.preorder()
 	}
-	//fmt.Println("preorder end!")
+	fmt.Println("preorder end!")
 }
 
 //findnode find the node by key and return it,if not exists return nil
@@ -331,23 +337,23 @@ func (n *node) Next() *node {
 }
 
 func (n *node) preorder() {
-	//fmt.Printf("(%v %v)", n.Key, n.Value)
+	fmt.Printf("(%v %v)", n.Key, n.Value)
 	if n.parent == nil {
-		//fmt.Printf("nil")
+		fmt.Printf("nil")
 	} else {
-		//fmt.Printf("whose parent is %v", n.parent.Key)
+		fmt.Printf("whose parent is %v", n.parent.Key)
 	}
 	if n.color == RED {
-		//fmt.Println(" and color RED")
+		fmt.Println(" and color RED")
 	} else {
-		//fmt.Println(" and color BLACK")
+		fmt.Println(" and color BLACK")
 	}
 	if n.left != nil {
-		//fmt.Printf("%v's left child is ", n.Key)
+		fmt.Printf("%v's left child is ", n.Key)
 		n.left.preorder()
 	}
 	if n.right != nil {
-		//fmt.Printf("%v's right child is ", n.Key)
+		fmt.Printf("%v's right child is ", n.Key)
 		n.right.preorder()
 	}
 }
@@ -366,7 +372,7 @@ func successor(x *node) *node {
 }
 
 //getColor get color of the node
-func getColor(n *node) int {
+func getColor(n *node) bool {
 	if n == nil {
 		return BLACK
 	}
@@ -389,7 +395,7 @@ func maximum(n *node) *node {
 	return n
 }
 
-func (n *node) Prex() *node {
+func (n *node) Prev() *node {
 	return psuccessor(n)
 }
 
