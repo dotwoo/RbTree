@@ -47,6 +47,34 @@ func (t *Tree) FindIt(key keytype) *node {
 	return t.findnode(key)
 }
 
+//FindLe 查找最接近key并小于key的none
+func (t *Tree) FindLe(key keytype) (ret *node) {
+	x := t.root
+	ret = x
+	for x != nil {
+		log.Println("FindLe:", x.Key, key)
+		if key.LessThan(x.Key) {
+			ret = x
+			x = x.left
+		} else {
+			if key == x.Key {
+				return x
+			} else {
+				ret = x
+				x = x.right
+			}
+		}
+	}
+	if ret == nil {
+		return nil
+	}
+	if !key.LessThan(ret.Key) {
+		log.Println("FindLe last:", x.Key, key)
+		ret = ret.Prev()
+	}
+	return ret
+}
+
 //Empty check whether the rbtree is empty
 func (t *Tree) Empty() bool {
 	if t.root == nil {
@@ -291,10 +319,10 @@ func (t *Tree) right_rotate(x *node) {
 	y.right = x
 	x.parent = y
 }
-func (t *Tree) Preorder() {
+func (t *Tree) Preorder(key keytype) {
 	fmt.Println("preorder begin!")
 	if t.root != nil {
-		t.root.preorder()
+		t.root.preorder(key)
 	}
 	fmt.Println("preorder end!")
 }
@@ -336,25 +364,39 @@ func (n *node) Next() *node {
 	return successor(n)
 }
 
-func (n *node) preorder() {
-	fmt.Printf("(%v %v)", n.Key, n.Value)
+func (n *node) preorder(key keytype) {
+	if n.Key == key {
+		fmt.Printf("(%v %v)", n.Key, n.Value)
+	}
 	if n.parent == nil {
-		fmt.Printf("nil")
+		if n.Key == key {
+			fmt.Printf("nil")
+		}
 	} else {
-		fmt.Printf("whose parent is %v", n.parent.Key)
+		if n.Key == key {
+			fmt.Printf("whose parent is %v", n.parent)
+		}
 	}
 	if n.color == RED {
-		fmt.Println(" and color RED")
+		if n.Key == key {
+			fmt.Println(" and color RED")
+		}
 	} else {
-		fmt.Println(" and color BLACK")
+		if n.Key == key {
+			fmt.Println(" and color BLACK")
+		}
 	}
 	if n.left != nil {
-		fmt.Printf("%v's left child is ", n.Key)
-		n.left.preorder()
+		if n.Key == key {
+			fmt.Printf("%v's left child is %v", n.Key, n.left)
+		}
+		n.left.preorder(key)
 	}
 	if n.right != nil {
-		fmt.Printf("%v's right child is ", n.Key)
-		n.right.preorder()
+		if n.Key == key {
+			fmt.Printf("%v's right child is %v", n.Key, n.right)
+		}
+		n.right.preorder(key)
 	}
 }
 
