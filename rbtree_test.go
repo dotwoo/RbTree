@@ -1,3 +1,7 @@
+// Copyright 2015, Hu Keping. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
 package rbtree
 
 import (
@@ -5,158 +9,290 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"reflect"
 	"sort"
 	"testing"
 
 	"github.com/maxim2266/csvplus"
 )
 
-type key uint32
+func TestInsertAndDelete(t *testing.T) {
+	rbt := New()
 
-func (n key) LessThan(b interface{}) bool {
-	value, _ := b.(key)
-	return n < value
-}
-
-func Test_Preorder(t *testing.T) {
-	tree := NewTree()
-
-	tree.Insert(key(1), "123")
-	tree.Insert(key(3), "234")
-	tree.Insert(key(4), "dfa3")
-	tree.Insert(key(6), "sd4")
-	tree.Insert(key(5), "jcd4")
-	tree.Insert(key(2), "bcd4")
-	if tree.Size() != 6 {
-		t.Error("Error size")
-		return
+	m := 0
+	n := 1000
+	for m < n {
+		rbt.Insert(Int(m))
+		m++
 	}
-	tree.Preorder()
-}
-
-func Test_Find(t *testing.T) {
-
-	tree := NewTree()
-
-	tree.Insert(key(1), "123")
-	tree.Insert(key(3), "234")
-	tree.Insert(key(4), "dfa3")
-	tree.Insert(key(6), "sd4")
-	tree.Insert(key(5), "jcd4")
-	tree.Insert(key(2), "bcd4")
-
-	n := tree.FindIt(key(4))
-	if n.Value != "dfa3" {
-		t.Error("Error value")
-		return
+	if rbt.Len() != uint(n) {
+		t.Errorf("tree.Len() = %d, expect %d", rbt.Len(), n)
 	}
-	n.Value = "bdsf"
-	if n.Value != "bdsf" {
-		t.Error("Error value modify")
-		return
+
+	for m > 0 {
+		rbt.Delete(Int(m))
+		m--
 	}
-	value := tree.Find(key(5)).(string)
-	if value != "jcd4" {
-		t.Error("Error value after modifyed other node")
-		return
+	if rbt.Len() != 1 {
+		t.Errorf("tree.Len() = %d, expect %d", rbt.Len(), 1)
 	}
 }
-func Test_Iterator(t *testing.T) {
-	tree := NewTree()
 
-	tree.Insert(key(1), "123")
-	tree.Insert(key(3), "234")
-	tree.Insert(key(4), "dfa3")
-	tree.Insert(key(6), "sd4")
-	tree.Insert(key(5), "jcd4")
-	tree.Insert(key(2), "bcd4")
+type testStruct struct {
+	id   int
+	text string
+}
 
-	it := tree.Iterator()
+func (ts *testStruct) Less(than Item) bool {
+	return ts.id < than.(*testStruct).id
+}
 
-	for it != nil {
-		it = it.Next()
+func TestInsertOrGet(t *testing.T) {
+	rbt := New()
+
+	items := []*testStruct{
+		{1, "this"},
+		{2, "is"},
+		{3, "a"},
+		{4, "test"},
 	}
+
+	for i := range items {
+		rbt.Insert(items[i])
+	}
+
+	newItem := &testStruct{items[0].id, "not"}
+	newItem = rbt.InsertOrGet(newItem).(*testStruct)
+
+	if newItem.text != items[0].text {
+		t.Errorf("tree.InsertOrGet = {id: %d, text: %s}, expect {id %d, text %s}", newItem.id, newItem.text, items[0].id, items[0].text)
+	}
+
+	newItem = &testStruct{5, "new"}
+	newItem = rbt.InsertOrGet(newItem).(*testStruct)
+
+	if newItem.text != "new" {
+		t.Errorf("tree.InsertOrGet = {id: %d, text: %s}, expect {id %d, text %s}", newItem.id, newItem.text, 5, "new")
+	}
+}
+
+func TestInsertString(t *testing.T) {
+	rbt := New()
+
+	rbt.Insert(String("go"))
+	rbt.Insert(String("lang"))
+
+	if rbt.Len() != 2 {
+		t.Errorf("tree.Len() = %d, expect %d", rbt.Len(), 2)
+	}
+}
+
+// Test for duplicate
+func TestInsertDup(t *testing.T) {
+	rbt := New()
+
+	rbt.Insert(String("go"))
+	rbt.Insert(String("go"))
+	rbt.Insert(String("go"))
+
+	if rbt.Len() != 1 {
+		t.Errorf("tree.Len() = %d, expect %d", rbt.Len(), 1)
+	}
+}
+
+func TestDescend(t *testing.T) {
+	rbt := New()
+
+	m := 0
+	n := 10
+	for m < n {
+		rbt.Insert(Int(m))
+		m++
+	}
+
+	var ret []Item
+
+	rbt.Descend(Int(1), func(i Item) bool {
+		ret = append(ret, i)
+		return true
+	})
+	expected := []Item{Int(1), Int(0)}
+	if !reflect.DeepEqual(ret, expected) {
+		t.Errorf("expected %v but got %v", expected, ret)
+	}
+
+	ret = nil
+	rbt.Descend(Int(10), func(i Item) bool {
+		ret = append(ret, i)
+		return true
+	})
+	expected = []Item{Int(9), Int(8), Int(7), Int(6), Int(5), Int(4), Int(3), Int(2), Int(1), Int(0)}
+	if !reflect.DeepEqual(ret, expected) {
+		t.Errorf("expected %v but got %v", expected, ret)
+	}
+}
+
+func TestGet(t *testing.T) {
+	rbt := New()
+
+	rbt.Insert(Int(1))
+	rbt.Insert(Int(2))
+	rbt.Insert(Int(3))
+
+	no := rbt.Get(Int(100))
+	ok := rbt.Get(Int(1))
+
+	if no != nil {
+		t.Errorf("100 is expect not exists")
+	}
+
+	if ok == nil {
+		t.Errorf("1 is expect exists")
+	}
+}
+
+func TestAscend(t *testing.T) {
+	rbt := New()
+
+	rbt.Insert(String("a"))
+	rbt.Insert(String("b"))
+	rbt.Insert(String("c"))
+	rbt.Insert(String("d"))
+
+	rbt.Delete(rbt.Min())
+
+	var ret []Item
+	rbt.Ascend(rbt.Min(), func(i Item) bool {
+		ret = append(ret, i)
+		return true
+	})
+
+	expected := []Item{String("b"), String("c"), String("d")}
+	if !reflect.DeepEqual(ret, expected) {
+		t.Errorf("expected %v but got %v", expected, ret)
+	}
+}
+
+func TestMax(t *testing.T) {
+	rbt := New()
+
+	rbt.Insert(String("z"))
+	rbt.Insert(String("h"))
+	rbt.Insert(String("a"))
+
+	expected := String("z")
+	if rbt.Max() != expected {
+		t.Errorf("expected Max of tree as %v but got %v", expected, rbt.Max())
+	}
+}
+
+func TestAscendRange(t *testing.T) {
+	rbt := New()
+
+	strings := []String{"a", "b", "c", "aa", "ab", "ac", "abc", "acb", "bac"}
+	for _, v := range strings {
+		rbt.Insert(v)
+	}
+
+	var ret []Item
+	rbt.AscendRange(String("ab"), String("b"), func(i Item) bool {
+		ret = append(ret, i)
+		return true
+	})
+	expected := []Item{String("ab"), String("abc"), String("ac"), String("acb")}
+
+	if !reflect.DeepEqual(ret, expected) {
+		t.Errorf("expected %v but got %v", expected, ret)
+	}
+}
+
+type key struct {
+	Key   uint32
+	Value bool
+}
+
+func (x key) Less(than Item) bool {
+	value, _ := than.(key)
+	return x.Key < value.Key
 
 }
 
-func Test_Delete(t *testing.T) {
-	tree := NewTree()
+func TestInsertLarge(t *testing.T) {
+	int2Bool := ReadGeo()
+	limit := 269649
+	sub := SubOfMap(limit, int2Bool)
+	fmt.Println("all item:", len(int2Bool))
+	//build
+	tree := New()
 
-	tree.Insert(key(1), "123")
-	tree.Insert(key(3), "234")
-	tree.Insert(key(4), "dfa3")
-	tree.Insert(key(6), "sd4")
-	tree.Insert(key(5), "jcd4")
-	tree.Insert(key(2), "bcd4")
-	for i := 1; i <= 6; i++ {
-		tree.Delete(key(i))
-		if tree.Size() != 6-i {
-			t.Error("Delete Error")
+	for k, v := range sub {
+		tree.Insert(key{k, v})
+	}
+	//check
+	for k, v := range sub {
+		r := tree.Get(key{k, v})
+		if r == nil || r.(key).Value != v {
+			t.Error("Cant't find:", k, v, r)
+			return
 		}
-		if tree.FindIt(key(i)) != nil {
-			t.Error("Delete Error")
-		}
 	}
-	tree.Insert(key(1), "bcd4")
-	tree.Clear()
-	tree.Preorder()
-	if tree.Find(key(1)) != nil {
-		t.Error("Can't clear")
-		return
+}
+func TestIndexLarge(t *testing.T) {
+	int2Bool := ReadGeo()
+	index, _ := KeysOfMap(int2Bool)
+	//build
+	tree := New()
+
+	for k, _ := range int2Bool {
+		tree.Insert(Uint32(k))
+	}
+	first := tree.First()
+	for _, k := range index {
+		if k != uint32((first.Item).(Uint32)) {
+			t.Error("Cant't find:", k, first.Item)
+			return
+		}
+		//fmt.Println(k, first.Item)
+		first = tree.Next(first)
 	}
 }
 
 func TestDeleteLarge(t *testing.T) {
 	int2Bool := ReadGeo()
-	keys, all := KeysOfMap(int2Bool)
-	fmt.Println("all item:", all)
+	limit := 2002000
+	sub := SubOfMap(limit, int2Bool)
+	fmt.Println("all item:", len(int2Bool))
 	//build
-	tree := NewTree()
-	limit := 100
+	tree := New()
 
-	for i, k := range keys {
-		tree.Insert(key(k), int2Bool[k])
-		if i > limit {
-			break
-		}
+	for k, v := range sub {
+		tree.Insert(key{k, v})
 	}
 	//check
-	for i, k := range keys {
-		v := int2Bool[k]
-		r := tree.FindIt(key(k))
-		if r == nil || r.Value.(bool) != v {
-			t.Error("Cant't find:", k, v, r)
+	for k, v := range sub {
+		r := tree.Get(key{k, v})
+		if r == nil || r.(key).Value != v {
+			t.Error("Cant't find1:", k, v, r)
 			return
-		}
-		if i > limit {
-			break
 		}
 	}
 	//return
 	//delete
-	for i, k := range keys {
-		v := int2Bool[k]
+	for k, v := range sub {
 		if !v {
-			tree.Delete(key(k))
-		}
-		if i > limit {
-			break
+			tree.Delete(key{k, v})
 		}
 	}
 
 	//delete check
-	for i, k := range keys {
-		v := int2Bool[k]
-		r := tree.FindIt(key(k))
-		if v && (r == nil || r.Value.(bool) != v) {
-			t.Error("Cant't find:", k, v, r)
+	for k, v := range sub {
+		r := tree.Get(key{k, v})
+		if v && (r == nil || r.(key).Value != v) {
+			t.Error("Cant't find2:", k, v, r)
 			return
-		} else if r != nil {
-			t.Error("Cant't find:", k, v, r)
+		} else if !v && r != nil {
+			t.Error("Cant't find3:", k, v, r)
 			return
-		}
-		if i > limit {
-			break
 		}
 	}
 }
@@ -240,4 +376,17 @@ func KeysOfMap(m map[uint32]bool) (keys Uint32Slice, cnt int) {
 
 	sort.Sort(keys)
 	return keys, cnt
+}
+
+func SubOfMap(limit int, m map[uint32]bool) map[uint32]bool {
+	i := 0
+	out := make(map[uint32]bool, 0)
+	for k, v := range m {
+		out[k] = v
+		i++
+		if i >= limit {
+			break
+		}
+	}
+	return out
 }

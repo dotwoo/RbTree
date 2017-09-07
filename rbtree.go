@@ -1,454 +1,463 @@
+// Copyright 2015, Hu Keping . All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+// Package rbtree implements operations on Red-Black tree.
 package rbtree
 
-import (
-	"fmt"
-	"log"
-)
+//
+// Red-Black tree properties:  http://en.wikipedia.org/wiki/Rbtree
+//
+//  1) A node is either red or black
+//  2) The root is black
+//  3) All leaves (NULL) are black
+//  4) Both children of every red node are black
+//  5) Every simple path from root to leaves contains the same number
+//     of black nodes.
+//
+type Node struct {
+	Left   *Node
+	Right  *Node
+	Parent *Node
+	Color  bool
+
+	// for use by client.
+	Item
+}
 
 const (
 	RED   = true
 	BLACK = false
 )
 
-type keytype interface {
-	LessThan(interface{}) bool
+type Item interface {
+	Less(than Item) bool
 }
 
-type valuetype interface{}
-
-type node struct {
-	left, right, parent *node
-	color               bool
-	Key                 keytype
-	Value               valuetype
+// Rbtree represents a Red-Black tree.
+type Rbtree struct {
+	NIL   *Node
+	root  *Node
+	count uint
 }
 
-type Tree struct {
-	root *node
-	size int
+func less(x, y Item) bool {
+	return x.Less(y)
 }
 
-//NewTree return a new rbtree
-func NewTree() *Tree {
-	return &Tree{}
-}
+// New returns an initialized Red-Black tree
+func New() *Rbtree { return new(Rbtree).Init() }
 
-//Find find the node and return its value
-func (t *Tree) Find(key keytype) interface{} {
-	n := t.findnode(key)
-	if n != nil {
-		return n.Value
+func (t *Rbtree) Init() *Rbtree {
+	node := &Node{nil, nil, nil, BLACK, nil}
+	return &Rbtree{
+		NIL:   node,
+		root:  node,
+		count: 0,
 	}
-	return nil
 }
 
-//FindIt find the node and return it as a iterator
-func (t *Tree) FindIt(key keytype) *node {
-	return t.findnode(key)
-}
-
-//FindLe 查找最接近key并小于key的none
-func (t *Tree) FindLe(key keytype) (ret *node) {
-	x := t.root
-	ret = x
-	for x != nil {
-		log.Println("FindLe:", x.Key, key)
-		if key.LessThan(x.Key) {
-			ret = x
-			x = x.left
-		} else {
-			if key == x.Key {
-				return x
-			} else {
-				ret = x
-				x = x.right
-			}
-		}
-	}
-	if ret == nil {
-		return nil
-	}
-	if !key.LessThan(ret.Key) {
-		log.Println("FindLe last:", x.Key, key)
-		ret = ret.Prev()
-	}
-	return ret
-}
-
-//Empty check whether the rbtree is empty
-func (t *Tree) Empty() bool {
-	if t.root == nil {
-		return true
-	}
-	return false
-}
-
-//Iterator create the rbtree's iterator that points to the minmum node
-func (t *Tree) Iterator() *node {
-	return minimum(t.root)
-}
-
-//Size return the size of the rbtree
-func (t *Tree) Size() int {
-	return t.size
-}
-
-//Clear destroy the rbtree
-func (t *Tree) Clear() {
-	t.root = nil
-	t.size = 0
-}
-
-//Insert insert the key-value pair into the rbtree
-func (t *Tree) Insert(key keytype, value valuetype) *node {
-	x := t.root
-	var y *node
-
-	for x != nil {
-		y = x
-		if key.LessThan(x.Key) {
-			x = x.left
-		} else {
-			x = x.right
-		}
+func (t *Rbtree) leftRotate(x *Node) {
+	// Since we are doing the left rotation, the right child should *NOT* nil.
+	if x.Right == t.NIL {
+		return
 	}
 
-	z := &node{parent: y, color: RED, Key: key, Value: value}
-	t.size += 1
+	//
+	// The illation of left rotation
+	//
+	//          |                                  |
+	//          X                                  Y
+	//         / \         left rotate            / \
+	//        α  Y       ------------->         X   γ
+	//           / \                            / \
+	//          β  γ                         α  β
+	//
+	// It should be note that during the rotating we do not change
+	// the Nodes' color.
+	//
+	y := x.Right
+	x.Right = y.Left
+	if y.Left != t.NIL {
+		y.Left.Parent = x
+	}
+	y.Parent = x.Parent
 
-	if y == nil {
-		z.color = BLACK
-		t.root = z
-		return z
-	} else if z.Key.LessThan(y.Key) {
-		y.left = z
+	if x.Parent == t.NIL {
+		t.root = y
+	} else if x == x.Parent.Left {
+		x.Parent.Left = y
 	} else {
-		y.right = z
+		x.Parent.Right = y
 	}
-	t.rb_insert_fixup(z)
+
+	y.Left = x
+	x.Parent = y
+}
+
+func (t *Rbtree) rightRotate(x *Node) {
+	// Since we are doing the right rotation, the left child should *NOT* nil.
+	if x.Left == t.NIL {
+		return
+	}
+
+	//
+	// The illation of right rotation
+	//
+	//          |                                  |
+	//          X                                  Y
+	//         / \         right rotate           / \
+	//        Y   γ      ------------->         α  X
+	//       / \                                    / \
+	//      α  β                                 β  γ
+	//
+	// It should be note that during the rotating we do not change
+	// the Nodes' color.
+	//
+	y := x.Left
+	x.Left = y.Right
+	if y.Right != t.NIL {
+		y.Right.Parent = x
+	}
+	y.Parent = x.Parent
+
+	if x.Parent == t.NIL {
+		t.root = y
+	} else if x == x.Parent.Left {
+		x.Parent.Left = y
+	} else {
+		x.Parent.Right = y
+	}
+
+	y.Right = x
+	x.Parent = y
+}
+
+func (t *Rbtree) insert(z *Node) *Node {
+	x := t.root
+	y := t.NIL
+
+	for x != t.NIL {
+		y = x
+		if less(z.Item, x.Item) {
+			x = x.Left
+		} else if less(x.Item, z.Item) {
+			x = x.Right
+		} else {
+			return x
+		}
+	}
+
+	z.Parent = y
+	if y == t.NIL {
+		t.root = z
+	} else if less(z.Item, y.Item) {
+		y.Left = z
+	} else {
+		y.Right = z
+	}
+
+	t.count++
+	t.insertFixup(z)
 	return z
 }
 
-//Delete delete the node by key
-func (t *Tree) Delete(key keytype) {
-	z := t.findnode(key)
-	if z == nil {
-		log.Println("delete cont find:", key)
-		return
+func (t *Rbtree) insertFixup(z *Node) {
+	for z.Parent.Color == RED {
+		//
+		// Howerver, we do not need the assertion of non-nil grandparent
+		// because
+		//
+		//  2) The root is black
+		//
+		// Since the color of the parent is RED, so the parent is not root
+		// and the grandparent must be exist.
+		//
+		if z.Parent == z.Parent.Parent.Left {
+			// Take y as the uncle, although it can be NIL, in that case
+			// its color is BLACK
+			y := z.Parent.Parent.Right
+			if y.Color == RED {
+				//
+				// Case 1:
+				// Parent and uncle are both RED, the grandparent must be BLACK
+				// due to
+				//
+				//  4) Both children of every red node are black
+				//
+				// Since the current node and its parent are all RED, we still
+				// in violation of 4), So repaint both the parent and the uncle
+				// to BLACK and grandparent to RED(to maintain 5)
+				//
+				//  5) Every simple path from root to leaves contains the same
+				//     number of black nodes.
+				//
+				z.Parent.Color = BLACK
+				y.Color = BLACK
+				z.Parent.Parent.Color = RED
+				z = z.Parent.Parent
+			} else {
+				if z == z.Parent.Right {
+					//
+					// Case 2:
+					// Parent is RED and uncle is BLACK and the current node
+					// is right child
+					//
+					// A left rotation on the parent of the current node will
+					// switch the roles of each other. This still leaves us in
+					// violation of 4).
+					// The continuation into Case 3 will fix that.
+					//
+					z = z.Parent
+					t.leftRotate(z)
+				}
+				//
+				// Case 3:
+				// Parent is RED and uncle is BLACK and the current node is
+				// left child
+				//
+				// At the very beginning of Case 3, current node and parent are
+				// both RED, thus we violate 4).
+				// Repaint parent to BLACK will fix it, but 5) does not allow
+				// this because all paths that go through the parent will get
+				// 1 more black node. Then repaint grandparent to RED (as we
+				// discussed before, the grandparent is BLACK) and do a right
+				// rotation will fix that.
+				//
+				z.Parent.Color = BLACK
+				z.Parent.Parent.Color = RED
+				t.rightRotate(z.Parent.Parent)
+			}
+		} else { // same as then clause with "right" and "left" exchanged
+			y := z.Parent.Parent.Left
+			if y.Color == RED {
+				z.Parent.Color = BLACK
+				y.Color = BLACK
+				z.Parent.Parent.Color = RED
+				z = z.Parent.Parent
+			} else {
+				if z == z.Parent.Left {
+					z = z.Parent
+					t.rightRotate(z)
+				}
+				z.Parent.Color = BLACK
+				z.Parent.Parent.Color = RED
+				t.leftRotate(z.Parent.Parent)
+			}
+		}
+	}
+	t.root.Color = BLACK
+}
+
+// Just traverse the node from root to left recursively until left is NIL.
+// The node whose left is NIL is the node with minimum value.
+func (t *Rbtree) min(x *Node) *Node {
+	if x == t.NIL {
+		return t.NIL
 	}
 
-	var x, y, parent *node
-	y = z
-	y_original_color := y.color
-	parent = z.parent
-	if z.left == nil {
-		x = z.right
-		t.transplant(z, z.right)
-	} else if z.right == nil {
-		x = z.left
-		t.transplant(z, z.left)
+	for x.Left != t.NIL {
+		x = x.Left
+	}
+
+	return x
+}
+
+// Just traverse the node from root to right recursively until right is NIL.
+// The node whose right is NIL is the node with maximum value.
+func (t *Rbtree) max(x *Node) *Node {
+	if x == t.NIL {
+		return t.NIL
+	}
+
+	for x.Right != t.NIL {
+		x = x.Right
+	}
+
+	return x
+}
+
+func (t *Rbtree) search(x *Node) *Node {
+	p := t.root
+
+	for p != t.NIL {
+		if less(p.Item, x.Item) {
+			p = p.Right
+		} else if less(x.Item, p.Item) {
+			p = p.Left
+		} else {
+			break
+		}
+	}
+
+	return p
+}
+
+func (t *Rbtree) searchle(x *Node) *Node {
+	p := t.root
+	n := p
+
+	for n != t.NIL {
+		if less(n.Item, x.Item) {
+			p = n
+			n = n.Right
+		} else if less(x.Item, n.Item) {
+			p = n
+			n = n.Left
+		} else {
+			return n
+			break
+		}
+	}
+	if less(p.Item, x.Item) {
+		return p
+	}
+
+	p = t.desuccessor(p)
+
+	return p
+}
+
+//TODO: Need Document
+func (t *Rbtree) successor(x *Node) *Node {
+	if x == t.NIL {
+		return t.NIL
+	}
+
+	// Get the minimum from the right sub-tree if it existed.
+	if x.Right != t.NIL {
+		return t.min(x.Right)
+	}
+
+	y := x.Parent
+	for y != t.NIL && x == y.Right {
+		x = y
+		y = y.Parent
+	}
+	return y
+}
+
+func (t *Rbtree) desuccessor(x *Node) *Node {
+	if x == t.NIL {
+		return t.NIL
+	}
+
+	// Get the minimum from the right sub-tree if it existed.
+	if x.Left != t.NIL {
+		return t.max(x.Left)
+	}
+
+	y := x.Parent
+	for y != t.NIL && x == y.Left {
+		x = y
+		y = y.Parent
+	}
+	return y
+}
+
+//TODO: Need Document
+func (t *Rbtree) delete(key *Node) *Node {
+	z := t.search(key)
+
+	if z == t.NIL {
+		return t.NIL
+	}
+	ret := &Node{t.NIL, t.NIL, t.NIL, z.Color, z.Item}
+
+	var y *Node
+	var x *Node
+
+	if z.Left == t.NIL || z.Right == t.NIL {
+		y = z
 	} else {
-		y = minimum(z.right)
-		y_original_color = y.color
-		x = y.right
+		y = t.successor(z)
+	}
 
-		if y.parent == z {
-			if x == nil {
-				parent = y
-			} else {
-				x.parent = y
-			}
-		} else {
-			t.transplant(y, y.right)
-			y.right = z.right
-			y.right.parent = y
-		}
-		t.transplant(z, y)
-		y.left = z.left
-		y.left.parent = y
-		y.color = z.color
-	}
-	if y_original_color == BLACK && x != nil {
-		t.rb_delete_fixup(x, parent)
-	}
-	t.size -= 1
-}
-
-func (t *Tree) rb_insert_fixup(z *node) {
-	var y *node
-	for z.parent != nil && z.parent.color == RED {
-		if z.parent == z.parent.parent.left {
-			y = z.parent.parent.right
-			if y != nil && y.color == RED {
-				z.parent.color = BLACK
-				y.color = BLACK
-				z.parent.parent.color = BLACK
-				z = z.parent.parent
-			} else {
-				if z == z.parent.right {
-					z = z.parent
-					t.left_rotate(z)
-				}
-				z.parent.color = BLACK
-				z.parent.parent.color = RED
-				t.right_rotate(z.parent.parent)
-			}
-		} else {
-			y = z.parent.parent.left
-			if y != nil && y.color == RED {
-				z.parent.color = BLACK
-				y.color = BLACK
-				z.parent.parent.color = RED
-				z = z.parent.parent
-			} else {
-				if z == z.parent.left {
-					z = z.parent
-					t.right_rotate(z)
-				}
-				z.parent.color = BLACK
-				z.parent.parent.color = RED
-				t.left_rotate(z.parent.parent)
-			}
-		}
-	}
-	t.root.color = BLACK
-}
-
-func (t *Tree) rb_delete_fixup(x, parent *node) {
-	var w *node
-	//fmt.Println(x, parent)
-	for x != t.root && getColor(x) == BLACK {
-		if x != nil {
-			parent = x.parent
-		}
-		if x == parent.left {
-			w = parent.right
-			if getColor(w) == RED {
-				w.color = BLACK
-				parent.color = RED
-				t.left_rotate(x.parent)
-				w = parent.right
-			}
-			if getColor(w.left) == BLACK && getColor(w.right) == BLACK {
-				w.color = RED
-				x = parent
-			} else {
-				if getColor(w.right) == BLACK {
-					if w.left != nil {
-						w.left.color = BLACK
-					}
-					w.color = RED
-					t.right_rotate(w)
-					w = parent.right
-				}
-				w.color = parent.color
-				parent.color = BLACK
-				if w.right != nil {
-					w.right.color = BLACK
-				}
-				t.left_rotate(parent)
-				x = t.root
-			}
-		} else {
-			w = parent.left
-			if getColor(w) == RED {
-				w.color = BLACK
-				parent.color = RED
-				t.right_rotate(parent)
-				w = parent.left
-			}
-			if getColor(w.left) == BLACK && getColor(w.right) == BLACK {
-				w.color = RED
-				x = parent
-			} else {
-				if getColor(w.left) == BLACK {
-					if w.right != nil {
-						w.right.color = BLACK
-					}
-					w.color = RED
-					t.left_rotate(w)
-					w = parent.left
-				}
-				w.color = parent.color
-				parent.color = BLACK
-				if w.left != nil {
-					w.left.color = BLACK
-				}
-				t.right_rotate(parent)
-				x = t.root
-			}
-		}
-	}
-	if x != nil {
-		x.color = BLACK
-	}
-}
-
-func (t *Tree) left_rotate(x *node) {
-	y := x.right
-	x.right = y.left
-	if y.left != nil {
-		y.left.parent = x
-	}
-	y.parent = x.parent
-	if x.parent == nil {
-		t.root = y
-	} else if x == x.parent.left {
-		x.parent.left = y
+	if y.Left != t.NIL {
+		x = y.Left
 	} else {
-		x.parent.right = y
+		x = y.Right
 	}
-	y.left = x
-	x.parent = y
-}
 
-func (t *Tree) right_rotate(x *node) {
-	y := x.left
-	x.left = y.right
-	if y.right != nil {
-		y.right.parent = x
-	}
-	y.parent = x.parent
-	if x.parent == nil {
+	// Even if x is NIL, we do the assign. In that case all the NIL nodes will
+	// change from {nil, nil, nil, BLACK, nil} to {nil, nil, ADDR, BLACK, nil},
+	// but do not worry about that because it will not affect the compare
+	// between Node-X with Node-NIL
+	x.Parent = y.Parent
+
+	if y.Parent == t.NIL {
 		t.root = x
-	} else if x == x.parent.left {
-		x.parent.left = y
+	} else if y == y.Parent.Left {
+		y.Parent.Left = x
 	} else {
-		x.parent.right = y
+		y.Parent.Right = x
 	}
-	y.right = x
-	x.parent = y
-}
-func (t *Tree) Preorder(key keytype) {
-	fmt.Println("preorder begin!")
-	if t.root != nil {
-		t.root.preorder(key)
+
+	if y != z {
+		z.Item = y.Item
 	}
-	fmt.Println("preorder end!")
+
+	if y.Color == BLACK {
+		t.deleteFixup(x)
+	}
+
+	t.count--
+
+	return ret
 }
 
-//findnode find the node by key and return it,if not exists return nil
-func (t *Tree) findnode(key keytype) *node {
-	x := t.root
-	for x != nil {
-		if key.LessThan(x.Key) {
-			x = x.left
-		} else {
-			if key == x.Key {
-				return x
+func (t *Rbtree) deleteFixup(x *Node) {
+	for x != t.root && x.Color == BLACK {
+		if x == x.Parent.Left {
+			w := x.Parent.Right
+			if w.Color == RED {
+				w.Color = BLACK
+				x.Parent.Color = RED
+				t.leftRotate(x.Parent)
+				w = x.Parent.Right
+			}
+			if w.Left.Color == BLACK && w.Right.Color == BLACK {
+				w.Color = RED
+				x = x.Parent
 			} else {
-				x = x.right
+				if w.Right.Color == BLACK {
+					w.Left.Color = BLACK
+					w.Color = RED
+					t.rightRotate(w)
+					w = x.Parent.Right
+				}
+				w.Color = x.Parent.Color
+				x.Parent.Color = BLACK
+				w.Right.Color = BLACK
+				t.leftRotate(x.Parent)
+				// this is to exit while loop
+				x = t.root
+			}
+		} else { // the code below is has left and right switched from above
+			w := x.Parent.Left
+			if w.Color == RED {
+				w.Color = BLACK
+				x.Parent.Color = RED
+				t.rightRotate(x.Parent)
+				w = x.Parent.Left
+			}
+			if w.Left.Color == BLACK && w.Right.Color == BLACK {
+				w.Color = RED
+				x = x.Parent
+			} else {
+				if w.Left.Color == BLACK {
+					w.Right.Color = BLACK
+					w.Color = RED
+					t.leftRotate(w)
+					w = x.Parent.Left
+				}
+				w.Color = x.Parent.Color
+				x.Parent.Color = BLACK
+				w.Left.Color = BLACK
+				t.rightRotate(x.Parent)
+				x = t.root
 			}
 		}
 	}
-	return nil
-}
-
-//transplant transplant the subtree u and v
-func (t *Tree) transplant(u, v *node) {
-	if u.parent == nil {
-		t.root = v
-	} else if u == u.parent.left {
-		u.parent.left = v
-	} else {
-		u.parent.right = v
-	}
-	if v == nil {
-		return
-	}
-	v.parent = u.parent
-}
-
-//Next return the node's successor as an iterator
-func (n *node) Next() *node {
-	return successor(n)
-}
-
-func (n *node) preorder(key keytype) {
-	if n.Key == key {
-		fmt.Printf("(%v %v)", n.Key, n.Value)
-	}
-	if n.parent == nil {
-		if n.Key == key {
-			fmt.Printf("nil")
-		}
-	} else {
-		if n.Key == key {
-			fmt.Printf("whose parent is %v", n.parent)
-		}
-	}
-	if n.color == RED {
-		if n.Key == key {
-			fmt.Println(" and color RED")
-		}
-	} else {
-		if n.Key == key {
-			fmt.Println(" and color BLACK")
-		}
-	}
-	if n.left != nil {
-		if n.Key == key {
-			fmt.Printf("%v's left child is %v", n.Key, n.left)
-		}
-		n.left.preorder(key)
-	}
-	if n.right != nil {
-		if n.Key == key {
-			fmt.Printf("%v's right child is %v", n.Key, n.right)
-		}
-		n.right.preorder(key)
-	}
-}
-
-//successor return the successor of the node
-func successor(x *node) *node {
-	if x.right != nil {
-		return minimum(x.right)
-	}
-	y := x.parent
-	for y != nil && x == y.right {
-		x = y
-		y = x.parent
-	}
-	return y
-}
-
-//getColor get color of the node
-func getColor(n *node) bool {
-	if n == nil {
-		return BLACK
-	}
-	return n.color
-}
-
-//minimum find the minimum node of subtree n.
-func minimum(n *node) *node {
-	for n.left != nil {
-		n = n.left
-	}
-	return n
-}
-
-//maximum find the maximum node of subtree n.
-func maximum(n *node) *node {
-	for n.right != nil {
-		n = n.right
-	}
-	return n
-}
-
-func (n *node) Prev() *node {
-	return psuccessor(n)
-}
-
-func psuccessor(x *node) *node {
-	if x.left != nil {
-		return maximum(x.left)
-	}
-	y := x.parent
-	for y != nil && x == y.left {
-		x = y
-		y = x.parent
-	}
-	return y
+	x.Color = BLACK
 }
