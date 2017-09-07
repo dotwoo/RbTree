@@ -11,13 +11,13 @@ package rbtree
 // Number of nodes in the tree.
 func (t *Rbtree) Len() uint { return t.count }
 
-func (t *Rbtree) Insert(item Item) {
+func (t *Rbtree) Insert(item Item) *Node {
 	if item == nil {
-		return
+		return nil
 	}
 
 	// Always insert a RED node
-	t.insert(&Node{t.NIL, t.NIL, t.NIL, RED, item})
+	return t.insert(&Node{t.NIL, t.NIL, t.NIL, RED, item})
 }
 
 //InsertOrGet inserts or retrieves the item in the tree. If the
