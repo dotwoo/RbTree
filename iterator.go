@@ -92,3 +92,7 @@ func (t *Rbtree) Prev(x *Node) *Node {
 func (t *Rbtree) First() *Node {
 	return t.min(t.root)
 }
+
+func (t *Rbtree) Tail() *Node {
+	return t.max(t.root)
+}
